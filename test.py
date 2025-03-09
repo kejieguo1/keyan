@@ -6,10 +6,21 @@ from TTransE import data_loader, entity2id, relation2id, time2id
 
 
 def dataloader(entity_file, relation_file, time_file, test_file):
-    entity_dict = {}
-    relation_dict = {}
-    time_dict = {}
-    test_quadruple = []
+    """
+
+    Args:
+        entity_file:
+        relation_file:
+        time_file:
+        test_file:
+
+    Returns:
+
+    """
+    entity_dict = {}  # key=实体id, value=对应的embedding
+    relation_dict = {}  # key=关系id, value=对应的embedding
+    time_dict = {}  # key=时序id, value=对应的embedding
+    test_quadruple = []  # 测试四元组
 
     with open(entity_file, 'r', encoding='utf-8') as e_f:
         lines = e_f.readlines()
@@ -107,8 +118,8 @@ class Test:
         rank_sum = 0
         step = 1
         for quadruple in self.test_quadruple:
-            rank_head_dict = {}
-            rank_tail_dict = {}
+            rank_head_dict = {}  # 替换头实体后的得分
+            rank_tail_dict = {}  # 替换尾实体后的得分
 
             for entity in self.entity_dict.keys():
                 if self.isFit:

@@ -157,10 +157,11 @@ class TTransE:
             # 归一化, shape = (embedding_dim, )
             # 时序字典: key=时序id数组, value=对应归一后的embedding
             time_dict[time] = e_emb_temp / np.linalg.norm(e_emb_temp, ord=2)
+
         # 将 relation，entity，time 更新为为 id 和向量对应的字典
-        self.relation = relation_dict
-        self.entity = entity_dict
-        self.time = time_dict
+        self.relation = relation_dict  # 关系实体字典
+        self.entity = entity_dict  # 实体字典
+        self.time = time_dict  # 时序字典
 
     def train(self, epochs):
         nbatches = 400
@@ -171,13 +172,14 @@ class TTransE:
             self.loss = 0
 
             for k in range(nbatches):
-                Sbatch = random.sample(self.quadruple_list, batch_size)
-                Tbatch = []
+                # 从给定的四元组id中随机选择不重复的元素
+                Sbatch = random.sample(self.quadruple_list, batch_size)  # batch_size个四元组id数组
+                Tbatch = []  # 列表，每一个元素是一个元组
                 for quadruple in Sbatch:
-                    corrupted_quadruple = self.Corrupt(quadruple)
-                    Tbatch.append((quadruple, corrupted_quadruple))
+                    corrupted_quadruple = self.Corrupt(quadruple)  # 得到负例
+                    Tbatch.append((quadruple, corrupted_quadruple))  # 正例和负例元组
 
-                self.update_embeddings(Tbatch)
+                self.update_embeddings(Tbatch)  # 根据当前批次（包含真实四元组和腐化四元id的数组）来更新嵌入向量
 
             end = time.time()
             print("epoch: ", epoch, "cost time: %s" % (round((end - start), 3)))
@@ -224,79 +226,119 @@ class TTransE:
 
     # 通过随机替换头实体或尾实体得到负例
     def Corrupt(self, quadruple):
+        """
+
+        Args:
+            quadruple: 四元组id数组
+
+        Returns:负例四元组id数组
+
+        """
         corrupted_quadruple = copy.deepcopy(quadruple)
         seed = random.random()
+        # 随机替换, 0.5概率
         if seed > 0.5:
             # 替换head
-            head = quadruple[0]
+            head = quadruple[0]  # 四元组id数组中的头实体
             rand_head = head
+            # 替换成(0, 实体数)之间的随机值
             while (rand_head == head):
                 rand_head = random.randint(0, len(self.entity) - 1)
-            corrupted_quadruple[0] = rand_head
+            corrupted_quadruple[0] = rand_head  # 负例头实体
 
         else:
             # 替换tail
-            tail = quadruple[2]
+            tail = quadruple[2]  # 四元组id数组中的尾实体
             rand_tail = tail
+            # 替换成(0, 实体数)之间的随机值
             while (rand_tail == tail):
                 rand_tail = random.randint(0, len(self.entity) - 1)
             corrupted_quadruple[2] = rand_tail
+        # 负例四元组id数组
         return corrupted_quadruple
 
     def update_embeddings(self, Tbatch):
-        # 不要每次都深拷贝整个字典，只拷贝当前 Tbatch 中出现的四元组对应的向量
+        """
+
+        Args:
+            Tbatch: 包含真实四元组和腐化四元id的数组
+
+        Returns:
+
+        """
+        # 不要每次都深拷贝整个字典, 只拷贝当前 Tbatch 中出现的四元组对应的向量
         entity_updated = {}
         relation_updated = {}
         time_updated = {}
+        # Tbatch是一个数组其元素是一个元组, 第一个元素为正例, 第二个元素为负例
         for quadruple, corrupted_quadruple in Tbatch:
             # 取原始的vector计算梯度
-            s_correct = self.entity[quadruple[0]]
+            # 正例, 头实体对应的embedding
+            s_correct = self.entity[quadruple[0]]  # quadruple[0]是实体id --> 经过实体字典 --> 实体的embedding
+            # 正例, 尾实体对应的embedding
             o_correct = self.entity[quadruple[2]]
 
+            # 负例, 头实体对应的embedding
             s_corrupt = self.entity[corrupted_quadruple[0]]
+            # 负例, 尾实体对应的embedding
             o_corrupt = self.entity[corrupted_quadruple[2]]
-
+            # 关系embedding
             relation = self.relation[quadruple[1]]
+            # 时间embedding
             time = self.time[quadruple[3]]
 
             if quadruple[0] in entity_updated.keys():
                 pass
             else:
+                # key=头实体id, value=头实体embedding
                 entity_updated[quadruple[0]] = copy.copy(self.entity[quadruple[0]])
+
             if quadruple[2] in entity_updated.keys():
                 pass
             else:
+                # key=尾实体id, value=尾实体embedding
                 entity_updated[quadruple[2]] = copy.copy(self.entity[quadruple[2]])
+
             if corrupted_quadruple[0] in entity_updated.keys():
                 pass
             else:
                 entity_updated[corrupted_quadruple[0]] = copy.copy(self.entity[corrupted_quadruple[0]])
+
             if corrupted_quadruple[2] in entity_updated.keys():
                 pass
             else:
                 entity_updated[corrupted_quadruple[2]] = copy.copy(self.entity[corrupted_quadruple[2]])
+
             if quadruple[1] in relation_updated.keys():
                 pass
             else:
                 relation_updated[quadruple[1]] = copy.copy(self.relation[quadruple[1]])
+
             if quadruple[3] in time_updated.keys():
                 pass
             else:
                 time_updated[quadruple[3]] = copy.copy(self.time[quadruple[3]])
 
+            # L1正则
             if self.L1:
+                # 正例头实体对应的embedding, 关系embedding, 正例尾实体对应的embedding, 时序embedding
                 dist_correct = distanceL1(s_correct, relation, o_correct, time)
+                # 负例头实体对应的embedding, 关系embedding, 负例尾实体对应的embedding, 时序embedding
                 dist_corrupt = distanceL1(s_corrupt, relation, o_corrupt, time)
+            # L2正则
             else:
                 dist_correct = distanceL2(s_correct, relation, o_correct, time)
                 dist_corrupt = distanceL2(s_corrupt, relation, o_corrupt, time)
 
+            # 损失函数
             err = self.hinge_loss(dist_correct, dist_corrupt)
 
             # err > 0时才更新参数
             if err > 0:
                 self.loss += err
+                # 正例梯度
                 grad_pos = 2 * (s_correct + relation + time - o_correct)
+                # 负例梯度
                 grad_neg = 2 * (s_corrupt + relation + time - o_corrupt)
                 if self.L1:
                     for i in range(len(grad_pos)):
@@ -312,6 +354,7 @@ class TTransE:
                             grad_neg[i] = -1
 
                 # 梯度求导参考 https://blog.csdn.net/weixin_42348333/article/details/89598144
+                # 头实体更新embedding
                 entity_updated[quadruple[0]] -= self.learning_rate * grad_pos
                 entity_updated[quadruple[2]] -= (-1) * self.learning_rate * grad_pos
 
@@ -324,7 +367,7 @@ class TTransE:
                 time_updated[quadruple[3]] -= self.learning_rate * grad_pos
                 time_updated[quadruple[3]] -= (-1) * self.learning_rate * grad_neg
 
-        # batch norm
+        # 归一化
         for i in entity_updated.keys():
             entity_updated[i] /= np.linalg.norm(entity_updated[i])
             self.entity[i] = entity_updated[i]
@@ -337,6 +380,7 @@ class TTransE:
             self.time[i] = time_updated[i]
         return
 
+    # 损失函数
     def hinge_loss(self, dist_correct, dist_corrupt):
         return max(0, dist_correct - dist_corrupt + self.margin)
 
