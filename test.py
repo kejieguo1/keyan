@@ -55,7 +55,7 @@ def dataloader(entity_file, relation_file, time_file, test_file):
 
             # 对于 test 中未在 train 中出现过的 entity，relation 和 time，对其进行随机初始化
             if quadruple[0] in entity2id:
-                s_ = entity2id[quadruple[0]]
+                s_ = entity2id[quadruple[0]]  # 头实体id
             else:
                 entity2id[quadruple[0]] = len_e
                 s_ = len_e
@@ -86,7 +86,8 @@ def dataloader(entity_file, relation_file, time_file, test_file):
                 time_dict[t_] = np.random.uniform(-6 / math.sqrt(50), 6 / math.sqrt(50), 50)
                 len_t += 1
 
-            test_quadruple.append([s_, r_, o_, t_])
+            test_quadruple.append([s_, r_, o_, t_])  # 测试id四元组
+    # 头实体字典, 关系字典, 时序字典, 测试id四元组
     return entity_dict, relation_dict, time_dict, test_quadruple
 
 
@@ -96,6 +97,16 @@ def distance(s, r, o, t):
 
 class Test:
     def __init__(self, entity_dict, relation_dict, time_dict, test_quadruple, train_quadruple, isFit=True):
+        """
+
+        Args:
+            entity_dict: 实体字典, key = 实体id, value = embedding
+            relation_dict: 关系字典, key = 关系id, value = embedding
+            time_dict:  时序字典, key = 关系id, value = embedding
+            test_quadruple: 测试id四元组
+            train_quadruple: 训练id四元组
+            isFit: 是否为拟合模式
+        """
         self.entity_dict = entity_dict
         self.relation_dict = relation_dict
         self.time_dict = time_dict
@@ -123,12 +134,13 @@ class Test:
 
             for entity in self.entity_dict.keys():
                 if self.isFit:
+                    # 检查当前替换的头实体（entity）是否会导致形成一个已经在训练集 train_quadruple 中出现的四元组
                     if [entity, quadruple[1], quadruple[2], quadruple[3]] not in self.train_quadruple:
-                        s_emb = self.entity_dict[entity]
-                        r_emb = self.relation_dict[quadruple[1]]
-                        o_emb = self.entity_dict[quadruple[2]]
-                        t_emb = self.time_dict[quadruple[3]]
-                        rank_head_dict[entity] = distance(s_emb, r_emb, o_emb, t_emb)
+                        s_emb = self.entity_dict[entity]  # 头实体embedding
+                        r_emb = self.relation_dict[quadruple[1]]  # 关系实体embedding
+                        o_emb = self.entity_dict[quadruple[2]]  # 尾实体embedding
+                        t_emb = self.time_dict[quadruple[3]]  # 时间embedding
+                        rank_head_dict[entity] = distance(s_emb, r_emb, o_emb, t_emb)  # 替换头实体后的得分
                 else:
                     s_emb = self.entity_dict[entity]
                     r_emb = self.relation_dict[quadruple[1]]
@@ -150,17 +162,17 @@ class Test:
                     t_emb = self.time_dict[quadruple[3]]
                     rank_tail_dict[entity] = distance(s_emb, r_emb, o_emb, t_emb)
 
-            rank_head_sorted = sorted(rank_head_dict.items(), key=operator.itemgetter(1))
-            rank_tail_sorted = sorted(rank_tail_dict.items(), key=operator.itemgetter(1))
+            rank_head_sorted = sorted(rank_head_dict.items(), key=operator.itemgetter(1))  # 替换头实体，排序后的头实体和得分的列表
+            rank_tail_sorted = sorted(rank_tail_dict.items(), key=operator.itemgetter(1))  # 替换尾实体，排序后的头实体和得分的列表
 
             # rank_sum and hits
             for i in range(len(rank_head_sorted)):
-                if quadruple[0] == rank_head_sorted[i][0]:
-                    if i == 0:
+                if quadruple[0] == rank_head_sorted[i][0]:  # 当前测试四元组的真实头实体与排序后的头实体匹配
+                    if i == 0:  # 当前头实体的排名在第一位
                         hits_1 += 1
-                    if i < 3:
+                    if i < 3:  # 当前头实体的排名在前3名之内
                         hits_3 += 1
-                    if i < 10:
+                    if i < 10:  # 当前头实体的排名在前10名之内
                         hits_10 += 1
                     rank_sum = rank_sum + i + 1
                     break
